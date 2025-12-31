@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f48ffe1bb7b037f2a655d7ee4e7e733a",
+    "content-hash": "7f38b8036e1ef17af4c6186b34046734",
     "packages": [
         {
             "name": "brick/math",
@@ -1051,6 +1051,77 @@
                 }
             ],
             "time": "2025-08-22T14:27:06+00:00"
+        },
+        {
+            "name": "juststeveking/laravel-flows",
+            "version": "1.0.3",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/JustSteveKing/laravel-flows.git",
+                "reference": "c69296717d608cf818ac283ce5d223f34d1e49d6"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/JustSteveKing/laravel-flows/zipball/c69296717d608cf818ac283ce5d223f34d1e49d6",
+                "reference": "c69296717d608cf818ac283ce5d223f34d1e49d6",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^8.3"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.21",
+                "orchestra/testbench": "^9.11",
+                "phpstan/phpstan": "^2.1",
+                "phpstan/phpstan-strict-rules": "^2.0",
+                "phpunit/phpunit": "^11.5.8",
+                "roave/security-advisories": "dev-latest"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "JustSteveKing\\Flows\\Providers\\PackageServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "JustSteveKing\\Flows\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Steve McDougall",
+                    "email": "juststevemcd@gmail.com",
+                    "homepage": "https://juststeveking.link/",
+                    "role": "Developer"
+                }
+            ],
+            "description": "A fluent, modular workflow builder for Laravel.",
+            "homepage": "https://github.com/juststeveking/laravel-flows",
+            "keywords": [
+                "builder",
+                "flows",
+                "laravel",
+                "workflow"
+            ],
+            "support": {
+                "email": "juststevemcd@gmail.com",
+                "issues": "https://github.com/juststeveking/laravel-flows/issues",
+                "source": "https://github.com/juststeveking/laravel-flows"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/sponsors/juststeveking",
+                    "type": "github"
+                }
+            ],
+            "time": "2025-02-21T07:35:34+00:00"
         },
         {
             "name": "laravel/framework",

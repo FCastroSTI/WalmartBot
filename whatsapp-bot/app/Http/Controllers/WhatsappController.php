@@ -20,9 +20,9 @@ class WhatsappController extends Controller
 
     public function __construct()
     {
-        $this->verifyToken = env('WHATSAPP_VERIFY_TOKEN');
-        $this->whatsappToken = env('WHATSAPP_TOKEN');
-        $this->phoneId = env('WHATSAPP_PHONE_ID');
+        $this->verifyToken = env('WHATSAPP_SEGUIMIENTO_VERIFY_TOKEN');
+        $this->whatsappToken = env('WHATSAPP_SEGUIMIENTO_TOKEN');
+        $this->phoneId = env('WHATSAPP_SEGUIMIENTO_PHONE_ID');
     }
     // ============================================================
     //  Obteniendo el token
@@ -153,29 +153,113 @@ class WhatsappController extends Controller
             ]
         );
 
+
+        $palabrasSalida = [
+            'salir',
+            'adios',
+            'adiós',
+            'chao',
+            'chau',
+            'no mas',
+            'no más',
+            'suficiente',
+            'terminar',
+            'cancelar',
+            'fin'
+        ];
+
+        foreach ($palabrasSalida as $palabra) {
+            if (str_contains($textoLimpio, $palabra)) {
+
+                // Reset completo de la conversación
+                $conv->estado = 'CERRADA';
+                $conv->intentos = 0;
+                $conv->datos = [];
+                $conv->formulario = null;
+                $conv->last_interaction = now();
+                $conv->save();
+
+                // Mensaje final
+                $this->sendMessage(
+                    $phone,
+                    "👋 Gracias por contactarnos.\nLa conversación ha sido finalizada.\nSi necesitas ayuda nuevamente, no dudes en contactarnos."
+                );
+
+                return response("EVENT_RECEIVED", 200);
+            }
+        }
         // ============================================================
         // FILTRO 2 → Reiniciar conversación por inactividad (10 minutos)
         // ============================================================
-        $limite = Carbon::now()->subMinutes(10);
+        if ($conv->last_interaction) {
 
-        if ($conv->last_interaction && $conv->last_interaction < $limite) {
+            $ultimoDia = Carbon::parse($conv->last_interaction)->toDateString();
+            $hoy = Carbon::now()->toDateString();
 
-            $conv->estado = 'INICIO';
-            $conv->intentos = 0;
-            $conv->datos = [];
-            $conv->formulario = null;
+            if ($ultimoDia !== $hoy) {
 
-            $conv->last_interaction = $ahora;
-            $conv->save();
+                // Reiniciar conversación
+                $conv->estado = 'INICIO';
+                $conv->intentos = 0;
+                $conv->datos = [];
+                $conv->formulario = null;
+                $conv->last_interaction = $ahora;
+                $conv->save();
 
-            $this->sendMessage($phone, "⏳ La sesión fue reiniciada por inactividad.\nEscriba *hola* para comenzar.");
+                // Mensaje inicial
 
-            return response("EVENT_RECEIVED", 200);
+                $this->sendMessage($phone, "👋 ¡Hola! Bienvenido a tu asistente virtual.");
+
+                $this->sendMessage(
+                    $phone,
+                    "Seleccione una opción. Recuerde que para EMERGENCIAS debe llamar al XXXXXXXX.\n\n" .
+                        "1️⃣ Consultar caso existente\n" .
+                        "2️⃣ Ingresar nuevo caso\n " .
+                        "Debe ingresar el número de la opcion"
+                );
+
+                return response("EVENT_RECEIVED", 200);
+            }
         }
         // ============================
         //          SWITCH
         // ============================
         switch ($conv->estado) {
+            // ============================================================
+            //  INICIO tras cierre
+            // ============================================================
+
+            case 'CERRADA':
+
+                if (
+                    str_contains($textoLimpio, 'hola') ||
+                    str_contains($textoLimpio, 'hi') ||
+                    str_contains($textoLimpio, 'buenas') ||
+                    str_contains($textoLimpio, 'hello') ||
+                    str_contains($textoLimpio, 'holi')
+                ) {
+
+                    // 🔄 Reset completo
+                    $conv->estado = 'INICIO';
+                    $conv->intentos = 0;
+                    $conv->datos = [];
+                    $conv->formulario = null;
+
+                    $this->sendMessage($phone, "👋 ¡Hola! Bienvenido nuevamente a tu asistente virtual.");
+
+                    $this->sendMessage(
+                        $phone,
+                        "Seleccione una opción. Recuerde que para EMERGENCIAS debe llamar al XXXXXXXX.\n\n" .
+                            "1️⃣ Consultar caso existente\n" .
+                            "2️⃣ Ingresar nuevo caso\n" .
+                            "Debe ingresar el número de la opción"
+                    );
+
+                    $conv->estado = 'ESPERANDO_OPCION_MENU';
+                }
+
+                // cualquier otra cosa → silencio
+                break;
 
             // ============================================================
             //  INICIO
@@ -241,7 +325,7 @@ class WhatsappController extends Controller
 
                     $this->sendMessage(
                         $phone,
-                        "Por favor seleccione identificador:\n1️⃣ Número de Ticket\n2️⃣ Número de ID\n3️⃣ Número de Local\nDebe ingresar el número de la opcion"
+                        "Por favor seleccione identificador:\n1️⃣ Número de Ticket\n2️⃣ Número de Tririga\n3️⃣ Número de Local\nDebe ingresar el número de la opcion"
                     );
 
                     $conv->estado = 'CONSULTA_SELECCION_IDENTIFICADOR';
@@ -253,7 +337,7 @@ class WhatsappController extends Controller
                     $this->sendMessage($phone, "❌ Debe seleccionar una de las opciones disponibles en menú.");
                     $this->sendMessage(
                         $phone,
-                        "Por favor seleccione identificador:\n1️⃣ Número de Ticket\n2️⃣ Número de ID\n3️⃣ Número de Local\nDebe ingresar el número de la opcion"
+                        "Por favor seleccione identificador:\n1️⃣ Número de Ticket\n2️⃣ Número de Tririga\n3️⃣ Número de Local\nDebe ingresar el número de la opcion"
                     );
                 }
 
@@ -277,7 +361,7 @@ class WhatsappController extends Controller
                     $this->sendMessage($phone, "❌ Debe seleccionar una de las opciones disponibles en menú.");
                     $this->sendMessage(
                         $phone,
-                        "Por favor seleccione identificador:\n1️⃣ Número de Ticket\n2️⃣ Número de ID\n3️⃣ Número de Local\nDebe ingresar el número de la opcion"
+                        "Por favor seleccione identificador:\n1️⃣ Número de Ticket\n2️⃣ Número de Tririga\n3️⃣ Número de Local\nDebe ingresar el número de la opcion"
                     );
                 }
 
@@ -314,7 +398,7 @@ class WhatsappController extends Controller
                 ) {
                     $this->sendMessage(
                         $phone,
-                        "ℹ️ No se encontraron casos asociados al ticket $ticket."
+                        "ℹ️ No se encontraron casos asociados al ticket $ticket.\n\n" . "📞 Si tiene dudas por favor comuníquese con la mesa de ayuda 220305515."
                     );
                 }
                 // 📄 Con resultados
@@ -322,15 +406,11 @@ class WhatsappController extends Controller
                     foreach ($resultado['result']['ticket'] as $t) {
                         $this->sendMessage(
                             $phone,
-                            $this->formatearTicketCRM($t)
+                            $this->formatearTicketCRM($t) . "📞 Si tiene dudas comuníquese con la mesa de ayuda 220305515."
                         );
                     }
                 }
 
-                $this->sendMessage(
-                    $phone,
-                    "📞 Si tiene dudas por favor comuníquese con la mesa de ayuda 220305515."
-                );
 
                 $this->sendMessage($phone, "¿Necesita otra consulta?");
                 $conv->estado = 'NECESITA_OTRA_CONSULTA';
@@ -366,7 +446,7 @@ class WhatsappController extends Controller
                 ) {
                     $this->sendMessage(
                         $phone,
-                        "ℹ️ No se encontraron casos asociados al ID $idAtencion."
+                        "ℹ️ No se encontraron casos asociados al ID $idAtencion.\n\n" . "📞 Si tiene dudas por favor comuníquese con la mesa de ayuda 220305515."
                     );
                 }
                 // 📄 Con resultados
@@ -374,15 +454,11 @@ class WhatsappController extends Controller
                     foreach ($resultado['result']['ticket'] as $t) {
                         $this->sendMessage(
                             $phone,
-                            $this->formatearTicketCRM($t)
+                            $this->formatearTicketCRM($t) . "📞 Si tiene dudas comuníquese con la mesa de ayuda 220305515."
                         );
                     }
                 }
 
-                $this->sendMessage(
-                    $phone,
-                    "📞 Si tiene dudas por favor comuníquese con la mesa de ayuda 220305515."
-                );
 
                 $this->sendMessage($phone, "¿Necesita otra consulta?");
                 $conv->estado = 'NECESITA_OTRA_CONSULTA';
@@ -416,21 +492,17 @@ class WhatsappController extends Controller
                 ) {
                     $this->sendMessage(
                         $phone,
-                        "ℹ️ El local $idLocal no registra casos asociados."
+                        "ℹ️ El local $idLocal no registra casos asociados.\n\n" . "📞 Si tiene dudas comuníquese con la mesa de ayuda 220305515."
                     );
                 } else {
                     foreach ($resultado['result']['ticket'] as $t) {
                         $this->sendMessage(
                             $phone,
-                            $this->formatearTicketCRM($t)
+                            $this->formatearTicketCRM($t) . "📞 Si tiene dudas comuníquese con la mesa de ayuda 220305515."
                         );
                     }
                 }
 
-                $this->sendMessage(
-                    $phone,
-                    "📞 Si tiene dudas comuníquese con la mesa de ayuda 220305515."
-                );
 
                 $conv->estado = 'FIN';
                 break;
@@ -454,7 +526,7 @@ class WhatsappController extends Controller
                 ) {
                     $this->sendMessage(
                         $phone,
-                        "Por favor seleccione identificador:\n1️⃣ Número de Ticket\n2️⃣ Número de ID\n3️⃣ Número de Local\nDebe ingresar el número de la opcion"
+                        "Por favor seleccione identificador:\n1️⃣ Número de Ticket\n2️⃣ Número de Tririga\n3️⃣ Número de Local\nDebe ingresar el número de la opcion"
                     );
 
                     $conv->estado = 'CONSULTA_SELECCION_IDENTIFICADOR';
@@ -630,21 +702,14 @@ class WhatsappController extends Controller
 
                 $this->sendMessage($phone, "✔ Código autorizado.");
 
-                $this->sendMessage($phone, "Complete el siguiente formulario:");
-                $this->sendMessage(
-                    $phone,
-                    "https://crm2new.upcom.cl/FormMantWalmartQA/Formulario"
-                );
+                $this->sendMessage($phone, "Para crear un caso haga clic en el siguiente link:\n\n https://crm2new.upcom.cl/FormMantWalmartQA/Formulario");
+
 
                 $this->sendMessage(
                     $phone,
-                    "📩 Si completó el formulario, dentro de los próximos 10 minutos recibirá un mail con la información asociada a su solicitud."
+                    "📩 Si completó el formulario, dentro de los próximos 10 minutos recibirá un mail con la información asociada a su solicitud. \n\n🙏 Gracias por usar nuestro servicio."
                 );
 
-                $this->sendMessage(
-                    $phone,
-                    "🙏 Gracias por usar nuestro servicio."
-                );
 
                 // Registrar envío del formulario
                 $datos = $conv->datos ?? [];

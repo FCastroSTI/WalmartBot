@@ -3,7 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\WhatsappController;
-
+use App\Http\Controllers\WhatsappSeguimientoController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -22,3 +22,8 @@ Route::get('/ping', function () {
 // Webhook de Meta (WhatsApp Cloud API)
 Route::get('/webhook', [WhatsappController::class, 'verify']);
 Route::post('/webhook', [WhatsappController::class, 'receive']);
+
+
+//Webhook para bot seguimiento
+Route::get('/webhook-seguimiento', [WhatsappSeguimientoController::class, 'verify']);
+Route::post('/webhook-seguimiento', [WhatsappSeguimientoController::class, 'receive']);
