@@ -8,17 +8,16 @@
 
 <body>
     <p>
-        Estimado proveedor {{ $nombre_proveedor }} {{ $rut_proveedor }},
+        Se informa que el ticket [ {{ $id_atencion ?? '[ID_Atencion]' }} ]<br>
+        Asignado al proveedor {{ $nombre_proveedor ?? '[Nombre Proveedor]' }} {{ $rut_proveedor ?? '[RUT proveedor]' }}.
     </p>
 
     <p>
-        Agradecemos su confirmación.<br>
-        Se realizará un nuevo seguimiento el
+        Ha sido reagendado para un nuevo seguimiento el cual se ejecutará en la siguiente fecha y hora:<br>
         <strong>
-            {{ \Carbon\Carbon::parse($fecha_hora)->format('d-m-Y') }}
-            a las
-            {{ \Carbon\Carbon::parse($fecha_hora)->format('H:i') }} hrs
-        </strong>.
+            {{ $fecha_hora ?? '[Fecha reagendada]' }}
+        </strong>
+        Actualizar nueva hora y fecha de llegada del proveedor en CRM
     </p>
 
     <p>

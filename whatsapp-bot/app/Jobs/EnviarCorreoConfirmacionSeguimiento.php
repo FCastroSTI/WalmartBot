@@ -50,7 +50,7 @@ class EnviarCorreoConfirmacionSeguimiento implements ShouldQueue
             $mailer->cc($cc);
         }
 
-        $mailer->send($mail);
+        $mailer->queue($mail);
 
         Log::info('✅ Correo de confirmación enviado', [
             'seguimiento_id' => $s->id,

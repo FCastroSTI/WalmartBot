@@ -30,17 +30,16 @@ class CerrarSeguimientoXSilencio implements ShouldQueue
 
 
         // 🔒 Si ya fue respondido o cerrado, no hacemos nada
-        if (
-            $seguimiento->estado_seguimiento !== 'ESPERANDO_RESPUESTA' ||
-            !in_array($seguimiento->subestado_conversacion, [
-                'ESPERANDO_FECHA_HORA_LLEGADA_REAL',
-                'ESPERANDO_FECHA_REAGENDADA'
-            ])
-        ) {
+        if (in_array($seguimiento->estado_seguimiento, [
+            'CERRADO_CONFIRMADO',
+            'CERRADO_REPROGRAMADO',
+            'CERRADO_NO_CONFIRMADO',
+            'CERRADO_SIN_RESPUESTA',
+        ])) {
             return;
         }
 
-        if ($seguimiento->espera_hasta_at && now()->lessThan($seguimiento->espera_hasta_at)) {
+        if (!$seguimiento->espera_hasta_at || now()->lessThan($seguimiento->espera_hasta_at)) {
             return;
         }
 
@@ -78,7 +77,7 @@ class CerrarSeguimientoXSilencio implements ShouldQueue
                     'to' => $seguimiento->telefono_proveedor,
                     'type' => 'template',
                     'template' => [
-                        'name' => 'seguimiento_cierre_silencio',
+                        'name' => 'seguimiento_cierre',
                         'language' => [
                             'code' => 'es_CL',
                         ],

@@ -15,3 +15,7 @@ Schedule::call(function () {
 
 Schedule::command('seguimiento:buscar-tickets')
     ->everyMinute();
+
+Schedule::command('seguimiento:ejecutar-pendientes')
+    ->everyMinute()
+    ->withoutOverlapping();

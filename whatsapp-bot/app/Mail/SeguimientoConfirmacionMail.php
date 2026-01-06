@@ -18,12 +18,16 @@ class SeguimientoConfirmacionMail extends Mailable
 
     public function build()
     {
-        return $this->subject('Confirmación proveedor - Seguimiento ' . $this->seguimiento->id_atencion)
+        return $this->subject('Seguimiento reagendado para el ticket ' . $this->seguimiento->id_atencion)
             ->view('email.seguimiento_confirmacion')
             ->with([
+                'id_atencion'      => $this->seguimiento->id_atencion,
                 'nombre_proveedor' => $this->seguimiento->nombre_proveedor,
                 'rut_proveedor'    => $this->seguimiento->rut_proveedor,
-                'fecha_hora'       => $this->seguimiento->ejecutar_desde_at,
+                'fecha_hora'       => $this->seguimiento->ejecutar_desde_at
+                    ? $this->seguimiento->ejecutar_desde_at->format('d-m-Y H:i')
+                    : 'Fecha no definida',
+                'mensaje'          => $this->mensajeWhatsapp,
             ]);
     }
 }

@@ -20,9 +20,9 @@ class WhatsappController extends Controller
 
     public function __construct()
     {
-        $this->verifyToken = env('WHATSAPP_SEGUIMIENTO_VERIFY_TOKEN');
-        $this->whatsappToken = env('WHATSAPP_SEGUIMIENTO_TOKEN');
-        $this->phoneId = env('WHATSAPP_SEGUIMIENTO_PHONE_ID');
+        //$this->verifyToken = env('');
+        //$this->whatsappToken = env('');
+        //$this->phoneId = env('');
     }
     // ============================================================
     //  Obteniendo el token

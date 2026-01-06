@@ -16,28 +16,92 @@ class SeguimientoBuscarTicket extends Command
     protected $signature = 'seguimiento:buscar-tickets';
     protected $description = 'Analiza tickets del CRM y crea seguimientos con ruta de flujo';
 
+    private function obtenerTokenCRM(): ?string
+    {
+        // 1️⃣ Token en cache
+        if (Cache::has('walmart_token')) {
+            return Cache::get('walmart_token');
+        }
+
+        // 2️⃣ LOGIN CORRECTO (GET + query params)
+        $response = Http::get(
+            'https://crm2new.upcom.cl/MantWalmartAPIQA/api/Login/Token',
+            [
+                'usuario'    => env('WALMART_API_USER'),
+                'contrasena' => env('WALMART_API_PASSWORD'),
+            ]
+        );
+
+        // 🔍 Log útil
+        Log::info('LOGIN CRM RESPONSE', [
+            'status' => $response->status(),
+            'body'   => $response->body(),
+        ]);
+
+        if (!$response->successful()) {
+            Log::error('Error login CRM', [
+                'status' => $response->status(),
+                'body'   => $response->body()
+            ]);
+            return null;
+        }
+
+        // 3️⃣ Token viene como string plano
+        $token = trim($response->body(), "\" \n\r\t");
+
+        // 4️⃣ Cachear token (50 min)
+        Cache::put('walmart_token', $token, now()->addMinutes(50));
+
+        return $token;
+    }
+
+
     public function handle()
     {
+        // ⚠️ AJUSTA la clave si el token viene con otro nombre
+        $token = $this->obtenerTokenCRM();
+
+        if (!$token) {
+            $this->error('❌ No se pudo obtener token CRM');
+            return;
+        }
+
+        $this->info('✅ Autenticación exitosa con API Walmart');
+
+
         Log::info('🚀 COMMAND seguimiento:buscar-tickets EJECUTADO');
         $this->info('🔍 Analizando tickets para seguimiento...');
 
-        // 1️⃣ Obtener tickets
-        if (config('app.mock_crm')) {
+        // 1️⃣ Obtener tickets desde API CRM
+        $this->info('🌐 Consultando API CRM...');
 
-            $this->info('🧪 Usando JSON mock');
-
-            $json = file_get_contents(
-                storage_path('app/mock/tickets_listar_dia.json')
-            );
-
-            $data = json_decode($json, true);
-            $tickets = $data['result']['ticket'] ?? [];
-
-            $this->line('📦 Tickets encontrados: ' . count($tickets));
-        } else {
-            $this->warn('⚠️ Modo CRM real (no debería usarse ahora)');
+        try {
+            $response = Http::withToken($token)
+                ->get(
+                    'https://crm2new.upcom.cl/MantWalmartAPIQA/api/Ticket/listarDia'
+                );
+        } catch (\Throwable $e) {
+            Log::error('❌ Error conectando con API CRM', [
+                'error' => $e->getMessage(),
+            ]);
             return;
         }
+
+        if (!$response->successful()) {
+            Log::error('❌ API CRM respondió error', [
+                'status' => $response->status(),
+                'body'   => $response->body(),
+            ]);
+            return;
+        }
+
+        $data = $response->json();
+
+        // ⚠️ Ajusta esta ruta si tu API responde distinto
+        $tickets = $data['result']['ticket'] ?? [];
+
+        $this->line('📦 Tickets encontrados desde API: ' . count($tickets));
+
 
         if (empty($tickets)) {
             $this->warn('ℹ️ No hay tickets para procesar');
@@ -84,7 +148,7 @@ class SeguimientoBuscarTicket extends Command
             // 4️⃣ Determinar camino
             $camino = null;
 
-            if ($crit === 'CRITICO' && $min >= 60) {
+            if ($crit === 'CRITICO' && $min >= 70) {
                 $camino = 2;
             } elseif ($crit === 'EXCEPCIONAL' && $min >= 120) {
                 $camino = 3;
@@ -96,17 +160,37 @@ class SeguimientoBuscarTicket extends Command
             }
 
             $this->info("🛣️ Camino asignado: {$camino}");
-
+            $telefonoPrueba = '+56949098167';
             // 5️⃣ Normalizar teléfono
-            $telefonoProveedor = $this->normalizarTelefono(
+            /*$telefonoProveedor = $this->normalizarTelefono(
                 $ticket['celular_1_PROVEEDOR']
                     ?? $ticket['celular_2_PROVEEDOR']
                     ?? null
-            );
+            );*ESTO ES TEMPORAL PARA PRUEBA CUANDO SE TERMINE SE DESBLOQUEA ESTE BLOQUE
+            
 
             if (!$telefonoProveedor) {
                 $this->warn('⛔ Descartado: teléfono inválido');
                 continue;
+            }*/
+
+            // 📞 TELÉFONO PROVEEDOR
+            if (app()->environment('local', 'testing')) {
+                // 🧪 Modo prueba: usar teléfono fijo
+                $telefonoProveedor = $telefonoPrueba;
+                $this->warn("🧪 Usando teléfono de prueba: {$telefonoProveedor}");
+            } else {
+                // 🔴 Producción: usar teléfono desde API
+                $telefonoProveedor = $this->normalizarTelefono(
+                    $ticket['celular_1_PROVEEDOR']
+                        ?? $ticket['celular_2_PROVEEDOR']
+                        ?? null
+                );
+
+                if (!$telefonoProveedor) {
+                    $this->warn('⛔ Descartado: teléfono inválido');
+                    continue;
+                }
             }
 
             // 6️⃣ Datos de proveedor (OPCIÓN 1: NO se guardan en la tabla)
@@ -126,6 +210,16 @@ class SeguimientoBuscarTicket extends Command
                 2 => 'PREGUNTA_HORA_COMPROMETIDA',
                 3 => 'PREGUNTA_LLEGADA',
             };
+
+            // 🔒 Lock conversacional temporal (evita doble inicio en la misma corrida)
+            $lockKey = "lock_conversacion_{$telefonoProveedor}";
+
+            if (Cache::has($lockKey)) {
+                $this->warn("🔒 Lock activo para {$telefonoProveedor}, se omite inicio");
+                continue;
+            }
+
+            Cache::put($lockKey, true, now()->addMinutes(15));
 
             // 7️⃣ Crear seguimiento (solo datos de control)
             $seguimiento = Seguimiento::create([
@@ -162,17 +256,33 @@ class SeguimientoBuscarTicket extends Command
 
     private function normalizarTicket(array $ticket): array
     {
+        $nombreProveedor = $ticket['nombrE_PROVEEDOR'] ?? null;
+        $rutProveedor    = $ticket['ruT_PROVEEDOR'] ?? null;
+        $criticidad      = $ticket['criticidad'] ?? null;
+
         return [
-            'nombre_proveedor' => $ticket['nombrE_PROVEEDOR'] ?? null,
-            'rut_proveedor'    => $ticket['ruT_PROVEEDOR'] ?? null,
+            // 🏢 Nombre proveedor: solo forzar si viene vacío
+            'nombre_proveedor' => (!is_string($nombreProveedor) || trim($nombreProveedor) === '')
+                ? 'Proveedor Desconocido'
+                : $nombreProveedor,
+
+            // 🆔 RUT proveedor: solo forzar si viene vacío
+            'rut_proveedor' => (!is_string($rutProveedor) || trim($rutProveedor) === '')
+                ? '11.111.111-1'
+                : $rutProveedor,
+
+            // ⚠️ Criticidad: solo forzar si viene vacío
+            'criticidad' => (!is_string($criticidad) || trim($criticidad) === '')
+                ? 'NORMAL'
+                : strtoupper(trim($criticidad)),
             'id_ATENCION'      => $ticket['iD_ATENCION']
                 ?? $ticket['ID_ATENCION']
                 ?? $ticket['id_ATENCION']
                 ?? null,
             'nro_TRIRIGA'      => $ticket['nrO_TRIRIGA'] ?? null,
             'id_LOCAL'         => $ticket['iD_LOCAL'] ?? null,
-            'fecha'            => $ticket['fecha'] ?? null,
-            'criticidad'       => $ticket['criticidad'] ?? 'NORMAL',
+            //'fecha'            => $ticket['fecha'] ?? null,
+            'fecha'               => '2026-01-06T07:10:00',
             'celular_1_PROVEEDOR' => $ticket['celulaR_1_PROVEEDOR'] ?? null,
             'celular_2_PROVEEDOR' => $ticket['celulaR_2_PROVEEDOR'] ?? null,
         ];

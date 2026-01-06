@@ -4,7 +4,6 @@ namespace App\Jobs;
 
 use App\Models\Seguimiento;
 use App\Jobs\CerrarSeguimientoXSilencio;
-use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -20,6 +19,14 @@ class ProcesarSeguimientoProveedor implements ShouldQueue
     protected int $seguimientoId;
     protected string $nombreProveedor;
     protected string $rutProveedor;
+
+    /**
+     * 📌 Cantidad esperada de parámetros por template
+     */
+    private const TEMPLATE_PARAM_COUNT = [
+        'seguimiento_saludo1'        => 4,
+        'seguimiento_saludo2'        => 5,
+    ];
 
     public function __construct(
         int $seguimientoId,
@@ -51,18 +58,26 @@ class ProcesarSeguimientoProveedor implements ShouldQueue
             return;
         }
 
-        // 1️⃣ Determinar template y subestado según camino
+        // =====================================================
+        // 1️⃣ Determinar template y subestado
+        // =====================================================
+        $horaComprometida = null;
+
         switch ((int) $seguimiento->camino) {
             case 1:
             case 3:
-                $templateName = 'seguimiento_llegada_tecnico';
+                $templateName = 'seguimiento_saludo1';
                 $subestado = 'PREGUNTA_LLEGADA';
                 break;
 
             case 2:
-                $templateName = 'mensaje_seguimiento2';
+                $templateName = 'seguimiento_saludo2';
                 $subestado = 'PREGUNTA_HORA_COMPROMETIDA';
-                $horaComprometida = optional($seguimiento->ejecutar_desde_at)
+                $horaComprometida = $seguimiento->ejecutar_desde_at
+                    ? $seguimiento->ejecutar_desde_at->format('H:i')
+                    : $seguimiento->created_at
+                    ->copy()
+                    ->addHours(2)
                     ->format('H:i');
                 break;
 
@@ -74,17 +89,34 @@ class ProcesarSeguimientoProveedor implements ShouldQueue
                 return;
         }
 
-        Log::info("*********");
-        // 2️⃣ Enviar template
+        // =====================================================
+        // 2️⃣ Preparar parámetros base
+        // =====================================================
+        $rawParameters = [
+            $this->nombreProveedor,              // {{1}}
+            $this->rutProveedor,                 // {{2}}
+            (string) $seguimiento->id_atencion,  // {{3}}
+            (string) $seguimiento->id_local,     // {{4}}
+        ];
+
+        // Template con 5 parámetros
+        if ($templateName === 'seguimiento_saludo2') {
+            $rawParameters[] = $horaComprometida;
+        }
+
+        // Normalizar según template
+        $parameters = $this->normalizeTemplateParameters(
+            $templateName,
+            $rawParameters
+        );
+
+        // =====================================================
+        // 3️⃣ Enviar template
+        // =====================================================
         $enviado = $this->sendTemplateMessage(
             $seguimiento->telefono_proveedor,
             $templateName,
-            [
-                $this->nombreProveedor,              // {{1}}
-                $this->rutProveedor,                 // {{2}}
-                (string) $seguimiento->id_atencion,  // {{3}}
-                (string) $seguimiento->id_local
-            ]
+            $parameters
         );
 
         if (!$enviado) {
@@ -94,7 +126,9 @@ class ProcesarSeguimientoProveedor implements ShouldQueue
             return;
         }
 
-        // 3️⃣ Actualizar estado SOLO si se envió
+        // =====================================================
+        // 4️⃣ Actualizar estado del seguimiento
+        // =====================================================
         $seguimiento->update([
             'estado_seguimiento'     => 'MENSAJE_ENVIADO',
             'subestado_conversacion' => $subestado,
@@ -102,15 +136,40 @@ class ProcesarSeguimientoProveedor implements ShouldQueue
             'espera_hasta_at'        => now()->addMinutes(10),
         ]);
 
-        // 4️⃣ Programar cierre por silencio
+        // =====================================================
+        // 5️⃣ Programar cierre por silencio
+        // =====================================================
         CerrarSeguimientoXSilencio::dispatch($seguimiento->id)
             ->delay(now()->addMinutes(10));
 
         Log::info('✅ Seguimiento procesado correctamente', [
-            'seguimiento_id' => $seguimiento->id
+            'seguimiento_id' => $seguimiento->id,
+            'template' => $templateName
         ]);
     }
 
+    /**
+     * 🧠 Normaliza parámetros según el template
+     */
+    private function normalizeTemplateParameters(
+        string $templateName,
+        array $parameters
+    ): array {
+        $expected = self::TEMPLATE_PARAM_COUNT[$templateName] ?? count($parameters);
+
+        while (count($parameters) < $expected) {
+            $parameters[] = '-';
+        }
+
+        return array_map(
+            fn($p) => trim((string) $p) === '' ? '-' : (string) $p,
+            array_slice($parameters, 0, $expected)
+        );
+    }
+
+    /**
+     * 📤 Enviar template WhatsApp
+     */
     private function sendTemplateMessage(
         string $to,
         string $templateName,
@@ -150,22 +209,22 @@ class ProcesarSeguimientoProveedor implements ShouldQueue
             ]
         ];
 
-        Log::info(json_encode($payload));
+        Log::info('📤 Payload WhatsApp Template', $payload);
 
         try {
             $response = Http::withToken($token)->post($url, $payload);
 
-            Log::info('📤 WhatsApp TEMPLATE enviado', [
-                'to' => $to,
-                'template' => $templateName,
+            Log::info('📨 Respuesta WhatsApp', [
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::error('❌ Error enviando template WhatsApp', [
+                'error' => $e->getMessage()
+            ]);
+            return false;
         }
-
-
-        return true;
     }
 }
