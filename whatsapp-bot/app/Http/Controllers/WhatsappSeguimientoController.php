@@ -309,19 +309,16 @@ class WhatsappSeguimientoController extends Controller
             'espera_hasta_at'       => null,
         ]);
 
+        $nombre = $s->nombre_proveedor ?? '[Nombre Proveedor]';
+        $rut    = $s->rut_proveedor ?? '[Rut Proveedor]';
         // Mensaje final
         $mensaje =
-            "Estimado proveedor {$s->nombre_proveedor} {$s->rut_proveedor}\n\n" .
+            "Estimado proveedor {$nombre} {$rut}\n\n" .
             "Agradecemos su confirmación, se procede a finalizar el seguimiento del " .
             "ID N° {$s->id_atencion} Local {$s->id_local}.\n\n" .
             "Atte.\nWalmart Mantención tiendas";
 
         $this->sendText($s->telefono_proveedor, $mensaje);
-    }
-
-    private function procesarHoraComprometida(Seguimiento $s, string $text): void
-    {
-        // similar a procesarLlegada pero específico crítico
     }
 
     private function guardarHoraLlegada(Seguimiento $s, string $hora): void
@@ -379,9 +376,11 @@ class WhatsappSeguimientoController extends Controller
             return;
         }
 
+        $nombre = $s->nombre_proveedor ?? '[Nombre Proveedor]';
+        $rut    = $s->rut_proveedor ?? '[Rut Proveedor]';
         // Mensaje de confirmación
         $mensaje =
-            "Estimado proveedor {$s->nombre_proveedor} {$s->rut_proveedor}\n\n" .
+            "Estimado proveedor {$nombre} {$rut}\n\n" .
             "Agradecemos su confirmación.\n" .
             "Se realizará un nuevo seguimiento en la fecha y hora indicadas.\n\n" .
             "Atte.\nWalmart Mantención tiendas";
@@ -434,8 +433,11 @@ class WhatsappSeguimientoController extends Controller
         // 🟢 CONFIRMA
         if (in_array($text, ['si', 'sí', 'ok', 'confirmo'])) {
 
+            $nombre = $s->nombre_proveedor ?? '[Nombre Proveedor]';
+            $rut    = $s->rut_proveedor ?? '[Rut Proveedor]';
+
             $mensaje =
-                "Estimado proveedor {$s->nombre_proveedor} {$s->rut_proveedor}\n\n" .
+                "Estimado proveedor {$nombre} {$rut}\n\n" .
                 "Agradecemos su confirmación.\n" .
                 "Se realizará un nuevo seguimiento\n" .
                 "para corroborar su llegada al local.\n\n" .
